@@ -224,3 +224,96 @@
          (intern (make-string 1 :initial-element c)))
        (symbol-name sym)))
 
+;;;
+;;; 返り値としての関数
+;;;
+
+;;; 直交性
+
+(defvar *!equivs* (make-hash-table))
+
+(defun ! (fn)
+  (or (gethash fn *!equivs*) fn))
+
+(defun def! (fn fn!)
+  (setf (gethash fn *!equivs*) fn!))
+
+;;; 関数の値のメモワイズ
+
+(defun memoize (fn)
+  (let ((cache (make-hash-table :test #'equal)))
+    (lambda (&rest args)
+      (multiple-value-bind (val win) (gethash args cache)
+        (if win
+            val
+            (setf (gethash args cache)
+                  (apply fn args)))))))
+
+;;; 関数を合成する
+
+(defun compose (&rest fns)
+  (if (null fns)
+      #'identity
+      (let ((fns (nreverse fns)))
+        (lambda (&rest args)
+          (reduce (lambda (acc fn) (funcall fn acc))
+                  (cdr fns)
+                  :initial-value (apply (car fns) args))))))
+
+(defun fif (if then &optional else)
+  (lambda (x)
+    (if (funcall if x)
+        (funcall then x)
+        (if else (funcall else x)))))
+
+(defun fint (fn &rest fns)
+  (if (null fns)
+      fn
+      (let ((chain (apply #'fint fns)))
+        (lambda (x)
+          (and (funcall fn x) (funcall chain x))))))
+
+(defun fun (fn &rest fns)
+  (if (null fns)
+      fn
+      (let ((chain (apply #'fun fns)))
+        (lambda (x)
+          (or (funcall fn x) (funcall chain x))))))
+
+;;; Cdr部での再帰
+
+(defun lrec (rec &optional base)
+  (labels ((self (ls)
+             (if (null ls)
+                 (if (functionp base)
+                     (funcall base)
+                     base)
+                 (funcall rec
+                          (car ls)
+                          (lambda ()
+                            (self (cdr ls)))))))
+    #'self))
+
+;;; 部分ツリーでの再帰
+
+(defun ttrav (rec &optional (base #'identity))
+  (labels ((self (tree)
+             (if (atom tree)
+                 (if (functionp base)
+                     (funcall base tree)
+                     base)
+                 (funcall rec (self (car tree))
+                          (if (cdr tree)
+                              (self (cdr tree)))))))
+    #'self))
+
+(defun trec (rec &optional (base #'identity))
+  (labels ((self (tree)
+             (if (atom tree)
+                 (if (functionp base)
+                     (funcall base tree)
+                     base)
+                 (funcall rec tree
+                          (lambda () (self (car tree)))
+                          (lambda () (if (cdr tree) (self (cdr tree))))))))
+    #'self))
