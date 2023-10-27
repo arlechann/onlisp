@@ -317,3 +317,28 @@
                           (lambda () (self (car tree)))
                           (lambda () (if (cdr tree) (self (cdr tree))))))))
     #'self))
+
+;;;
+;;; マクロ
+;;;
+
+;;; 逆クォート
+
+(defmacro nil! (var)
+  `(setf ,var nil))
+
+(defmacro nif (expr pos zero neg)
+  `(case (truncate (signum ,expr))
+     (1 ,pos)
+     (0 ,zero)
+     (-1 ,neg)))
+
+(defmacro while (test &body body)
+  `(do ()
+       ((not ,test))
+     ,@body))
+
+;;; マクロ展開の確認
+
+(defmacro mac (expr)
+  `(pprint (macroexpand-1 ',expr)))
