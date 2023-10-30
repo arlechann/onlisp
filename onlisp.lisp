@@ -659,3 +659,12 @@
                            (cdr rest)))
                  temps)
        ,@(mapcar #'fourth meths))))
+
+;;;
+;;; コンパイル時の計算処理
+;;;
+
+;;; 新しいユーティリティ
+
+(defun nthmost (n ls)
+  (nth n (sort (copy-list ls) #'>)))
