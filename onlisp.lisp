@@ -750,10 +750,99 @@
 (let ((g (gensym)))
   (defun read2 (&optional (str *standard-input*))
     (let ((val (read str nil g)))
-      (unless (equal val g) (value val t)))))
+      (unless (equal val g) (values val t)))))
 
 (defmacro do-file (filename &body body)
   (let ((str (gensym)))
     `(with-open-file (,str ,filename)
        (awhile2 (read2 ,str)
          ,@body))))
+
+;;;
+;;; 関数を返すマクロ
+;;;
+
+(defmacro fn (expr) `#',(rbuild expr))
+
+(defun rbuild (expr)
+  (if (or (atom expr) (eq (car expr) 'lambda))
+      expr
+      (if (eq (car expr) 'compose)
+          (build-compose (cdr expr))
+          (build-call (car expr) (cdr expr)))))
+
+(defun build-call (op fns)
+  (let ((g (gensym)))
+    `(lambda (,g)
+       (,op ,@(mapcar (lambda (f)
+                        `(,(rbuild f) ,g))
+                      fns)))))
+
+(defun build-compose (fns)
+  (let ((g (gensym)))
+    `(lambda (,g)
+       ,(labels ((rec (fns)
+                   (if fns
+                       `(,(rbuild (car fns))
+                         ,(rec (cdr fns)))
+                       g)))
+          (rec fns)))))
+
+;;; Cdr部での再帰
+
+(defmacro alrec (rec &optional base)
+  (let ((gfn (gensym)))
+    `(lrec (lambda (it ,gfn)
+             (symbol-macrolet ((rec (funcall ,gfn)))
+               ,rec))
+           ,base)))
+
+(defmacro on-cdrs (rec base &rest lsts)
+  `(funcall (alrec ,rec (lambda () ,base)) ,@lsts))
+
+(defun unions (&rest sets)
+  (on-cdrs (union it rec) (car sets) (cdr sets)))
+
+(defun intersections (&rest sets)
+  (unless (some #'null sets)
+    (on-cdrs (intersections it rec) (car sets) (cdr sets))))
+
+(defun maxmin (args)
+  (when args
+    (on-cdrs (multiple-value-bind (mx mn) rec
+               (values (max mx it) (min mn it)))
+             (values (car args) (car args))
+             (cdr args))))
+
+;;; 部分ツリーでの再帰
+
+(defmacro atrec (rec &optional (base 'it))
+  (let ((lfn (gensym)) (rfn (gensym)))
+    `(trec (lambda (it ,lfn ,rfn)
+             (symbol-macrolet ((left (funcall ,lfn))
+                               (right (funcall ,rfn)))
+               ,rec))
+           (lambda (it) ,base))))
+
+(defmacro on-trees (rec base &rest trees)
+  `(funcall (atrec ,rec ,base) ,@trees))
+
+;;; 遅延評価
+
+(defstruct delay forced closure)
+
+(defmacro delay (expr)
+  (let ((self (gensym)))
+    `(let ((,self (make-delay :forced nil)))
+       (setf (delay-closure ,self)
+             (lambda ()
+               (setf (delay-forced ,self) t
+                     (delay-closure ,self) ,expr)))
+       ,self)))
+
+(defun force (x)
+  (if (delay-p x)
+      (if (delay-forced x)
+          (delay-closure x)
+          (funcall (delay-closure x)))
+      x))
