@@ -902,3 +902,38 @@
 
 (defun anaphex3 (op args)
   `(_f (lambda (it) (,op it ,@(cdr args))) ,(car args)))
+
+;;;
+;;; リードマクロ
+;;;
+
+;;; マクロ文字のディスパッチング
+
+(set-dispatch-macro-character #\# #\?
+                              (lambda (stream char1 char2)
+                                (declare (ignore char1 char2))
+                                (let ((sym (gensym)))
+                                  `(lambda (&rest ,sym)
+                                     (declare (ignore ,sym))
+                                     ,(read stream t nil t)))))
+
+;;; デリミタ
+
+(defmacro defdelim (left right parms &body body)
+  `(ddfn ,left ,right (lambda ,parms ,@body)))
+
+(let ((rpar (get-macro-character #\))))
+  (defun ddfn (left right fn)
+    (set-macro-character right rpar)
+    (set-dispatch-macro-character
+     #\#
+     left
+     (lambda (stream char1 char2)
+       (apply fn
+              (read-delimited-list right stream t))))))
+
+(defdelim #\[ #\] (x y)
+  (list 'quote (mapa-b #'identity (ceiling x) (floor y))))
+
+(defdelim #\{ #\} (&rest args)
+  `(fn (compose ,@args)))
